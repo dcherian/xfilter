@@ -140,7 +140,10 @@ def _wrap_butterworth(data, coord, freq, kind, cycles_per='s', order=2,
     if data.ndim > 2:
         # reshape to 2D array
         # 'dim' is now first index
+        is_stacked = True
         data = data.stack(newdim=stackdims)
+    else:
+        is_stacked = False
 
     newdims = data.dims
     if newdims[0] != coord:
@@ -153,7 +156,7 @@ def _wrap_butterworth(data, coord, freq, kind, cycles_per='s', order=2,
                                       data.values,
                                       b, a)
 
-    if data.ndim > 2:
+    if is_stacked:
         # unstack back to original shape and ordering
         filtered = data.unstack('newdim').transpose(*list(old_dims))
     else:

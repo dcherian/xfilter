@@ -1,0 +1,3 @@
+* xfilter: A package for time domain filtering xarray objects
+
+Simple wrapping for scipy's Butterworth filter and `scipy.filtfilt`.

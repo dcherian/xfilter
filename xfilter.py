@@ -1,6 +1,5 @@
 import numpy as np
 from scipy import signal
-import xarray as xr
 import dcpy.ts
 import matplotlib.pyplot as plt
 
@@ -36,13 +35,16 @@ def _butterworth_coeffs(order, nondim_freq, kind):
     return signal.butter(order, nondim_freq, btype=kind)
 
 
-def gappy_filter(data, b, a, num_discard='auto'):
+def gappy_filter(data, b, a, num_discard='auto', method='gust'):
 
     out = np.zeros_like(data) * np.nan
 
-    irlen = _estimate_impulse_response(b, a, 1e-9)
+    kwargs = dict()
+    if method == 'gust':
+        kwargs['irlen'] = _estimate_impulse_response(b, a, 1e-9)
+
     if num_discard == 'auto':
-        num_discard = _estimate_impulse_response(b, a, eps=1e-2)
+        num_discard = _estimate_impulse_response(b, a)
 
     segstart, segend = find_segments(data)
 
@@ -51,9 +53,10 @@ def gappy_filter(data, b, a, num_discard='auto'):
         try:
             out[start:stop] = signal.filtfilt(b, a,
                                               data[start:stop],
-                                              axis=0, method='gust',
-                                              irlen=irlen)
-            if num_discard is not None:
+                                              axis=0,
+                                              method=method,
+                                              **kwargs)
+            if num_discard is not None and num_discard > 0:
                 out[start:start + num_discard] = np.nan
                 out[stop - num_discard:stop] = np.nan
         except ValueError:
@@ -94,7 +97,7 @@ def find_segments(var):
 
 
 def _wrap_butterworth(data, coord, freq, kind, cycles_per='s', order=2,
-                      debug=False):
+                      debug=False, **kwargs):
     '''
     Inputs
     ------
@@ -106,6 +109,8 @@ def _wrap_butterworth(data, coord, freq, kind, cycles_per='s', order=2,
         Units for frequency
     order : optional
         Butterworth filter order
+    kwargs : dict, optional
+        passed down to gappy_filter
 
     Outputs
     -------
@@ -152,9 +157,10 @@ def _wrap_butterworth(data, coord, freq, kind, cycles_per='s', order=2,
     else:
         transposed = False
 
-    data.values = np.apply_along_axis(gappy_filter, 0,
-                                      data.values,
-                                      b, a)
+    data.values = np.apply_along_axis(gappy_filter,
+                                      axis=0,
+                                      arr=data.values,
+                                      b=b, a=a, **kwargs)
 
     if is_stacked:
         # unstack back to original shape and ordering

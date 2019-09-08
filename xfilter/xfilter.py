@@ -4,24 +4,22 @@ import dcpy.ts
 import matplotlib.pyplot as plt
 
 
-def _process_time(time, cycles_per='s'):
+def _process_time(time, cycles_per="s"):
 
     time = time.copy()
     dt = np.nanmedian(np.diff(time.values) / np.timedelta64(1, cycles_per))
 
-    time = np.cumsum(time.copy()
-                     .diff(dim=time.dims[0])
-                     / np.timedelta64(1, cycles_per))
+    time = np.cumsum(time.copy().diff(dim=time.dims[0]) / np.timedelta64(1, cycles_per))
 
     return dt, time
 
 
 def _estimate_impulse_response(b, a, eps=1e-2):
-    ''' From scipy filtfilt docs.
+    """ From scipy filtfilt docs.
         Input:
              b, a : filter params
              eps  : How low must the signal drop to? (default 1e-2)
-    '''
+    """
 
     z, p, k = signal.tf2zpk(b, a)
     r = np.max(np.abs(p))
@@ -35,15 +33,15 @@ def _butterworth_coeffs(order, nondim_freq, kind):
     return signal.butter(order, nondim_freq, btype=kind)
 
 
-def gappy_filter(data, b, a, num_discard='auto', method='gust'):
+def gappy_filter(data, b, a, num_discard="auto", method="gust"):
 
     out = np.zeros_like(data) * np.nan
 
     kwargs = dict()
-    if method == 'gust':
-        kwargs['irlen'] = _estimate_impulse_response(b, a, 1e-9)
+    if method == "gust":
+        kwargs["irlen"] = _estimate_impulse_response(b, a, 1e-9)
 
-    if num_discard == 'auto':
+    if num_discard == "auto":
         num_discard = _estimate_impulse_response(b, a)
 
     segstart, segend = find_segments(data)
@@ -51,14 +49,12 @@ def gappy_filter(data, b, a, num_discard='auto', method='gust'):
     for index, start in np.ndenumerate(segstart):
         stop = segend[index]
         try:
-            out[start:stop] = signal.filtfilt(b, a,
-                                              data[start:stop],
-                                              axis=0,
-                                              method=method,
-                                              **kwargs)
+            out[start:stop] = signal.filtfilt(
+                b, a, data[start:stop], axis=0, method=method, **kwargs
+            )
             if num_discard is not None and num_discard > 0:
-                out[start:start + num_discard] = np.nan
-                out[stop - num_discard:stop] = np.nan
+                out[start : start + num_discard] = np.nan
+                out[stop - num_discard : stop] = np.nan
         except ValueError:
             # segment is not long enough for filtfilt
             pass
@@ -67,14 +63,14 @@ def gappy_filter(data, b, a, num_discard='auto', method='gust'):
 
 
 def find_segments(var):
-    '''
+    """
       Finds and return valid index ranges for the input time series.
       Input:
             var - input time series
       Output:
             start - starting indices of valid ranges
             stop  - ending indices of valid ranges
-    '''
+    """
 
     NotNans = np.double(~np.isnan(var))
     edges = np.diff(NotNans)
@@ -96,9 +92,10 @@ def find_segments(var):
     return start, stop
 
 
-def _wrap_butterworth(data, coord, freq, kind, cycles_per='s', order=2,
-                      debug=False, **kwargs):
-    '''
+def _wrap_butterworth(
+    data, coord, freq, kind, cycles_per="s", order=2, debug=False, **kwargs
+):
+    """
     Inputs
     ------
 
@@ -116,19 +113,19 @@ def _wrap_butterworth(data, coord, freq, kind, cycles_per='s', order=2,
     -------
 
     filtered : xr.DataArray
-    '''
+    """
 
     # if len(data.dims) > 1 and coord is None:
     #     raise ValueError('Specify coordinate along which to filter')
     # else:
     #     coord = data.coords[0]
 
-    if data[coord].dtype.kind == 'M':
+    if data[coord].dtype.kind == "M":
         dx, x = _process_time(data[coord], cycles_per)
     else:
         dx = np.diff(data[coord][0:2].values)
 
-    b, a = _butterworth_coeffs(order, freq*dx/(1/2), kind)
+    b, a = _butterworth_coeffs(order, freq * dx / (1 / 2), kind)
 
     data = data.copy()
     if debug:
@@ -136,7 +133,7 @@ def _wrap_butterworth(data, coord, freq, kind, cycles_per='s', order=2,
 
     old_dims = data.dims
     idim = data.get_axis_num(coord)
-    stackdims = data.dims[:idim] + data.dims[idim + 1:]
+    stackdims = data.dims[:idim] + data.dims[idim + 1 :]
 
     # xr.testing.assert_equal(x,
     #                         x.stack(newdim=stackdims)
@@ -157,14 +154,13 @@ def _wrap_butterworth(data, coord, freq, kind, cycles_per='s', order=2,
     else:
         transposed = False
 
-    data.values = np.apply_along_axis(gappy_filter,
-                                      axis=0,
-                                      arr=data.values,
-                                      b=b, a=a, **kwargs)
+    data.values = np.apply_along_axis(
+        gappy_filter, axis=0, arr=data.values, b=b, a=a, **kwargs
+    )
 
     if is_stacked:
         # unstack back to original shape and ordering
-        filtered = data.unstack('newdim').transpose(*list(old_dims))
+        filtered = data.unstack("newdim").transpose(*list(old_dims))
     else:
         filtered = data
 
@@ -182,15 +178,12 @@ def _wrap_butterworth(data, coord, freq, kind, cycles_per='s', order=2,
 
 
 def bandpass(data, coord, freq, **kwargs):
-    return _wrap_butterworth(data, coord, np.sort(freq),
-                             kind='bandpass', **kwargs)
+    return _wrap_butterworth(data, coord, np.sort(freq), kind="bandpass", **kwargs)
 
 
 def lowpass(data, coord, freq, **kwargs):
-    return _wrap_butterworth(data, coord, freq,
-                             kind='lowpass', **kwargs)
+    return _wrap_butterworth(data, coord, freq, kind="lowpass", **kwargs)
 
 
 def highpass(data, coord, freq, **kwargs):
-    return _wrap_butterworth(data, coord, freq,
-                             kind='highpass', **kwargs)
+    return _wrap_butterworth(data, coord, freq, kind="highpass", **kwargs)

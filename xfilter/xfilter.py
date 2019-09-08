@@ -21,7 +21,7 @@ def _estimate_impulse_response(b, a, eps=1e-2):
              eps  : How low must the signal drop to? (default 1e-2)
     """
 
-    z, p, k = signal.tf2zpk(b, a)
+    _, p, _ = signal.tf2zpk(b, a)
     r = np.max(np.abs(p))
     approx_impulse_len = int(np.ceil(np.log(eps) / np.log(r)))
 

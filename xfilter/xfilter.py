@@ -33,12 +33,11 @@ def _butterworth_coeffs(order, nondim_freq, kind):
     return signal.butter(order, nondim_freq, btype=kind)
 
 
-def gappy_filter(data, b, a, num_discard="auto", method="gust"):
+def gappy_filter(data, b, a, num_discard="auto", method="gust", **kwargs):
 
     out = np.zeros_like(data) * np.nan
 
-    kwargs = dict()
-    if method == "gust":
+    if method == "gust" and "irlen" not in kwargs:
         kwargs["irlen"] = _estimate_impulse_response(b, a, 1e-9)
 
     if num_discard == "auto":

@@ -1,7 +1,6 @@
 import numpy as np
 from scipy import signal
 import dcpy.ts
-import matplotlib.pyplot as plt
 
 
 def _process_time(time, cycles_per="s"):
@@ -167,6 +166,8 @@ def _wrap_butterworth(
         filtered = filtered.transpose()
 
     if debug:
+        import matplotlib.pyplot as plt
+
         ylim = plt.gca().get_ylim()
         dcpy.ts.PlotSpectrum(filtered, cycles_per=cycles_per, ax=plt.gca())
         plt.gca().set_ylim(ylim)

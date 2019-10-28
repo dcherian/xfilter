@@ -1,6 +1,8 @@
-import numpy as np
-from scipy import signal
 import dcpy.ts
+import numpy as np
+import xarray as xr
+
+from scipy import signal
 
 
 def _process_time(time, cycles_per="s"):
@@ -130,41 +132,14 @@ def _wrap_butterworth(
     if debug:
         dcpy.ts.PlotSpectrum(data, cycles_per=cycles_per)
 
-    old_dims = data.dims
-    idim = data.get_axis_num(coord)
-    stackdims = data.dims[:idim] + data.dims[idim + 1 :]
-
-    # xr.testing.assert_equal(x,
-    #                         x.stack(newdim=stackdims)
-    #                          .unstack('newdim')
-    #                          .transpose(*list(x.dims)))
-    if data.ndim > 2:
-        # reshape to 2D array
-        # 'dim' is now first index
-        is_stacked = True
-        data = data.stack(newdim=stackdims)
-    else:
-        is_stacked = False
-
-    newdims = data.dims
-    if newdims[0] != coord:
-        data = data.transpose()
-        transposed = True
-    else:
-        transposed = False
-
-    data.values = np.apply_along_axis(
-        gappy_filter, axis=0, arr=data.values, b=b, a=a, gappy=gappy, **kwargs
+    filtered = xr.apply_ufunc(
+        gappy_filter,
+        data,
+        input_core_dims=[[coord]],
+        output_core_dims=[[coord]],
+        dask="parallelized",
+        kwargs=dict(b=b, a=a, gappy=gappy, **kwargs),
     )
-
-    if is_stacked:
-        # unstack back to original shape and ordering
-        filtered = data.unstack("newdim").transpose(*list(old_dims))
-    else:
-        filtered = data
-
-    if transposed:
-        filtered = filtered.transpose()
 
     if debug:
         import matplotlib.pyplot as plt

@@ -27,7 +27,7 @@ def _estimate_impulse_response(b, a, eps=1e-2):
     return approx_impulse_len
 
 
-def gappy_filter(data, b, a, num_discard="auto", method="gust", **kwargs):
+def gappy_filter(data, b, a, num_discard="auto", method="gust", gappy=True, **kwargs):
 
     out = np.zeros_like(data) * np.nan
 
@@ -37,20 +37,26 @@ def gappy_filter(data, b, a, num_discard="auto", method="gust", **kwargs):
     if num_discard == "auto":
         num_discard = _estimate_impulse_response(b, a)
 
-    segstart, segend = find_segments(data)
+    if gappy:
+        segstart, segend = find_segments(data)
 
-    for index, start in np.ndenumerate(segstart):
-        stop = segend[index]
-        try:
-            out[start:stop] = signal.filtfilt(
-                b, a, data[start:stop], axis=0, method=method, **kwargs
-            )
-            if num_discard is not None and num_discard > 0:
-                out[start : start + num_discard] = np.nan
-                out[stop - num_discard : stop] = np.nan
-        except ValueError:
-            # segment is not long enough for filtfilt
-            pass
+        for index, start in np.ndenumerate(segstart):
+            stop = segend[index]
+            try:
+                out[start:stop] = signal.filtfilt(
+                    b, a, data[start:stop], axis=0, method=method, **kwargs
+                )
+                if num_discard is not None and num_discard > 0:
+                    out[start : start + num_discard] = np.nan
+                    out[stop - num_discard : stop] = np.nan
+            except ValueError:
+                # segment is not long enough for filtfilt
+                pass
+    else:
+        out = signal.filtfilt(b, a, data, axis=0, method=method, **kwargs)
+        if num_discard is not None and num_discard > 0:
+            out[:num_discard] = np.nan
+            out[-num_discard:] = np.nan
 
     return out.squeeze()
 

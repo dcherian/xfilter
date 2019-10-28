@@ -35,7 +35,7 @@ def test_data():
         (bandpass, (1 / 40, 1 / 250), "mid"),
     ],
 )
-def test_filters(test_data, filt, freq, expect):
-    actual = filt(test_data.total, coord="time", freq=freq, order=4)
+def test_filters(test_data, filt, freq, expect, gappy):
+    actual = filt(test_data.total, coord="time", freq=freq, order=4, gappy=gappy)
     expected = test_data[expect].where(~np.isnan(actual))
     assert_allclose(actual, expected, atol=1e-2)

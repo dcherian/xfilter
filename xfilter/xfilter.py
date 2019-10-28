@@ -27,11 +27,6 @@ def _estimate_impulse_response(b, a, eps=1e-2):
     return approx_impulse_len
 
 
-def _butterworth_coeffs(order, nondim_freq, kind):
-
-    return signal.butter(order, nondim_freq, btype=kind)
-
-
 def gappy_filter(data, b, a, num_discard="auto", method="gust", **kwargs):
 
     out = np.zeros_like(data) * np.nan
@@ -123,7 +118,7 @@ def _wrap_butterworth(
     else:
         dx = np.diff(data[coord][0:2].values)
 
-    b, a = _butterworth_coeffs(order, freq * dx / (1 / 2), kind)
+    b, a = signal.butter(order, freq * dx / (1 / 2), btype=kind)
 
     data = data.copy()
     if debug:

@@ -26,6 +26,7 @@ def test_data():
     return data
 
 
+@pytest.mark.parametrize("gappy", [True, False])
 @pytest.mark.parametrize(
     "filt, freq, expect",
     [

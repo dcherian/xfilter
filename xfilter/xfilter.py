@@ -86,7 +86,7 @@ def find_segments(var):
 
 
 def _wrap_butterworth(
-    data, coord, freq, kind, cycles_per="s", order=2, debug=False, **kwargs
+    data, coord, freq, kind, cycles_per="s", order=2, debug=False, gappy=True, **kwargs
 ):
     """
     Inputs
@@ -148,7 +148,7 @@ def _wrap_butterworth(
         transposed = False
 
     data.values = np.apply_along_axis(
-        gappy_filter, axis=0, arr=data.values, b=b, a=a, **kwargs
+        gappy_filter, axis=0, arr=data.values, b=b, a=a, gappy=gappy, **kwargs
     )
 
     if is_stacked:

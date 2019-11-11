@@ -45,9 +45,10 @@ def estimate_impulse_response_len(b, a, eps=1e-3):
 def gappy_filter(data, b, a, gappy=True, **kwargs):
 
     out = np.zeros_like(data) * np.nan
-
-    kwargs["axis"] = -1
     num_discard = kwargs.pop("num_discard")
+
+    assert "axis" not in kwargs
+    kwargs["axis"] = -1
 
     if gappy:
         raise ValueError("find_segments not fixed for apply_ufunc yet!")
@@ -138,7 +139,8 @@ def _wrap_butterworth(
 
     b, a = signal.butter(order, freq * dx / (1 / 2), btype=kind)
 
-    data = data.copy()
+    data = data.copy().transpose(..., coord)
+
     if debug:
         dcpy.ts.PlotSpectrum(data, cycles_per=cycles_per)
 
@@ -167,6 +169,7 @@ def _wrap_butterworth(
             input_core_dims=[[coord]],
             output_core_dims=[[coord]],
             dask="parallelized",
+            output_dtypes=[data.dtype],
             kwargs=kwargs,
         )
     else:
@@ -175,8 +178,8 @@ def _wrap_butterworth(
             raise ValueError("map_overlap implemented only for DataArrays.")
         irlen = estimate_impulse_response_len(b, a)
         axis = data.get_axis_num(coord)
-        overlap = np.round(3 * irlen).astype(int)
-        min_chunksize = 1 * overlap
+        overlap = np.round(2 * irlen).astype(int)
+        min_chunksize = 3 * overlap
         actual_chunksize = data.data.chunksize[axis]
 
         if actual_chunksize < min_chunksize:
@@ -184,11 +187,13 @@ def _wrap_butterworth(
                 f"Chunksize along {coord} = {actual_chunksize} < {min_chunksize}. Please rechunk"
             )
 
+        depth = dict(zip(range(data.ndim), [0]*data.ndim))
+        depth[data.ndim-1] = overlap
         filtered = data.copy(
             data=dask.array.map_overlap(
                 data.data,
                 gappy_filter,
-                depth=(overlap,),
+                depth=depth,
                 boundary="none",
                 num_discard=None,  # don't discard since map_overlap's trimming will do this.
                 meta=data.data._meta,

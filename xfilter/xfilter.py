@@ -40,27 +40,27 @@ def gappy_filter(data, b, a, num_discard="auto", method="gust", gappy=True, **kw
         num_discard = _estimate_impulse_response(b, a)
 
     if gappy:
+        raise ValueError("find_segments not fixed for apply_ufunc yet!")
         segstart, segend = find_segments(data)
-
         for index, start in np.ndenumerate(segstart):
             stop = segend[index]
             try:
-                out[start:stop] = signal.filtfilt(
-                    b, a, data[start:stop], axis=0, method=method, **kwargs
+                out[..., start:stop] = signal.filtfilt(
+                    b, a, data[..., start:stop], axis=-1, method=method, **kwargs
                 )
                 if num_discard is not None and num_discard > 0:
-                    out[start : start + num_discard] = np.nan
-                    out[stop - num_discard : stop] = np.nan
+                    out[..., start : start + num_discard] = np.nan
+                    out[..., stop - num_discard : stop] = np.nan
             except ValueError:
                 # segment is not long enough for filtfilt
                 pass
     else:
-        out = signal.filtfilt(b, a, data, axis=0, method=method, **kwargs)
+        out = signal.filtfilt(b, a, data, axis=-1, method=method, **kwargs)
         if num_discard is not None and num_discard > 0:
-            out[:num_discard] = np.nan
-            out[-num_discard:] = np.nan
+            out[...,:num_discard] = np.nan
+            out[...,-num_discard:] = np.nan
 
-    return out.squeeze()
+    return out
 
 
 def find_segments(var):

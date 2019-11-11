@@ -1,8 +1,21 @@
+import dask
 import dcpy.ts
 import numpy as np
 import xarray as xr
 
 from scipy import signal
+
+
+def _get_num_discard(kwargs):
+
+    num_discard = kwargs.get("num_discard")
+    if num_discard == "auto":
+        if "irlen" in kwargs:
+            num_discard = kwargs["irlen"]
+        else:
+            num_discard = estimate_impulse_response_len(b, a)
+
+    return num_discard
 
 
 def _process_time(time, cycles_per="s"):
@@ -15,7 +28,7 @@ def _process_time(time, cycles_per="s"):
     return dt, time
 
 
-def _estimate_impulse_response(b, a, eps=1e-2):
+def estimate_impulse_response_len(b, a, eps=1e-3):
     """ From scipy filtfilt docs.
         Input:
              b, a : filter params
@@ -29,15 +42,12 @@ def _estimate_impulse_response(b, a, eps=1e-2):
     return approx_impulse_len
 
 
-def gappy_filter(data, b, a, num_discard="auto", method="gust", gappy=True, **kwargs):
+def gappy_filter(data, b, a, gappy=True, **kwargs):
 
     out = np.zeros_like(data) * np.nan
 
-    if method == "gust" and "irlen" not in kwargs:
-        kwargs["irlen"] = _estimate_impulse_response(b, a, 1e-9)
-
-    if num_discard == "auto":
-        num_discard = _estimate_impulse_response(b, a)
+    kwargs["axis"] = -1
+    num_discard = kwargs.pop("num_discard")
 
     if gappy:
         raise ValueError("find_segments not fixed for apply_ufunc yet!")
@@ -46,7 +56,7 @@ def gappy_filter(data, b, a, num_discard="auto", method="gust", gappy=True, **kw
             stop = segend[index]
             try:
                 out[..., start:stop] = signal.filtfilt(
-                    b, a, data[..., start:stop], axis=-1, method=method, **kwargs
+                    b, a, data[..., start:stop], **kwargs
                 )
                 if num_discard is not None and num_discard > 0:
                     out[..., start : start + num_discard] = np.nan
@@ -55,10 +65,10 @@ def gappy_filter(data, b, a, num_discard="auto", method="gust", gappy=True, **kw
                 # segment is not long enough for filtfilt
                 pass
     else:
-        out = signal.filtfilt(b, a, data, axis=-1, method=method, **kwargs)
+        out = signal.filtfilt(b, a, data, **kwargs)
         if num_discard is not None and num_discard > 0:
-            out[...,:num_discard] = np.nan
-            out[...,-num_discard:] = np.nan
+            out[..., :num_discard] = np.nan
+            out[..., -num_discard:] = np.nan
 
     return out
 
@@ -132,14 +142,65 @@ def _wrap_butterworth(
     if debug:
         dcpy.ts.PlotSpectrum(data, cycles_per=cycles_per)
 
-    filtered = xr.apply_ufunc(
-        gappy_filter,
-        data,
-        input_core_dims=[[coord]],
-        output_core_dims=[[coord]],
-        dask="parallelized",
-        kwargs=dict(b=b, a=a, gappy=gappy, **kwargs),
-    )
+    if data.chunks:
+        chunks = dict(zip(data.dims, data.chunks))
+        if len(chunks[coord]) > 1:
+            use_overlap = True
+        else:
+            use_overlap = False
+    else:
+        use_overlap = False
+
+    kwargs.setdefault("num_discard", "auto")
+    kwargs.setdefault("method", "gust")
+
+    if kwargs["method"] == "gust" and "irlen" not in kwargs:
+        kwargs["irlen"] = estimate_impulse_response_len(b, a)
+    kwargs["num_discard"] = _get_num_discard(kwargs)
+
+    kwargs.update(b=b, a=a, gappy=gappy)
+
+    if not use_overlap:
+        filtered = xr.apply_ufunc(
+            gappy_filter,
+            data,
+            input_core_dims=[[coord]],
+            output_core_dims=[[coord]],
+            dask="parallelized",
+            kwargs=kwargs,
+        )
+    else:
+        num_discard = kwargs.pop("num_discard")
+        if not isinstance(data, xr.DataArray):
+            raise ValueError("map_overlap implemented only for DataArrays.")
+        irlen = estimate_impulse_response_len(b, a)
+        axis = data.get_axis_num(coord)
+        overlap = np.round(3 * irlen).astype(int)
+        min_chunksize = 1 * overlap
+        actual_chunksize = data.data.chunksize[axis]
+
+        if actual_chunksize < min_chunksize:
+            raise ValueError(
+                f"Chunksize along {coord} = {actual_chunksize} < {min_chunksize}. Please rechunk"
+            )
+
+        filtered = data.copy(
+            data=dask.array.map_overlap(
+                data.data,
+                gappy_filter,
+                depth=(overlap,),
+                boundary="none",
+                num_discard=None,  # don't discard since map_overlap's trimming will do this.
+                meta=data.data._meta,
+                **kwargs,
+            )
+        )
+
+        # manually nan-out num_discard at the front and back
+        mask = xr.DataArray(np.ones((filtered.sizes[coord],)), dims=[coord], name=coord)
+        mask[:num_discard] = False
+        mask[-num_discard:] = False
+        filtered = filtered.where(mask)
 
     if debug:
         import matplotlib.pyplot as plt

@@ -43,8 +43,7 @@ def test_filters(test_data, filt, freq, expect, gappy):
 
 
 @pytest.mark.parametrize(
-    "filt, freq",
-    [(lowpass, 1 / 50), (highpass, 1 / 50), (bandpass, (1 / 40, 1 / 250))],
+    "filt, freq", [(lowpass, 1 / 50), (highpass, 1 / 50), (bandpass, (1 / 40, 1 / 250))]
 )
 def test_map_overlap(test_data, filt, freq):
     actual = filt(
@@ -54,3 +53,19 @@ def test_map_overlap(test_data, filt, freq):
 
     assert (np.isnan(actual) == np.isnan(expected)).all()
     assert_allclose(actual, expected)
+
+
+@pytest.mark.parametrize(
+    "filt, freq", [(lowpass, 1 / 50), (highpass, 1 / 50), (bandpass, (1 / 40, 1 / 250))]
+)
+def test_gappy_filter(test_data, filt, freq):
+    da = test_data.total.copy()
+    da[500:1000] = np.nan
+    da[3000:3100] = np.nan
+    da = da.expand_dims(x=10)
+
+    numpy_ans = filt(da, coord="time", freq=freq, gappy=True)
+    dask_ans = filt(da.chunk({"time": -1, "x": 1}), coord="time", freq=freq, gappy=True)
+
+    assert isinstance(dask_ans.data, dask.array.Array)
+    xr.testing.assert_equal(numpy_ans, dask_ans.compute())

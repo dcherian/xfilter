@@ -42,30 +42,41 @@ def estimate_impulse_response_len(b, a, eps=1e-3):
     return approx_impulse_len
 
 
+def gappy_1d_filter(data, b, a, num_discard, **kwargs):
+    out = np.zeros_like(data) * np.nan
+    assert data.ndim == 1
+    segstart, segend = find_segments(data)
+    for index, start in np.ndenumerate(segstart):
+        stop = segend[index]
+        try:
+            out[..., start:stop] = signal.filtfilt(
+                b, a, data[..., start:stop], **kwargs
+            )
+            if num_discard is not None and num_discard > 0:
+                out[..., start : start + num_discard] = np.nan
+                out[..., stop - num_discard : stop] = np.nan
+        except ValueError:
+            # segment is not long enough for filtfilt
+            pass
+    return out
+
+
 def gappy_filter(data, b, a, gappy=True, **kwargs):
 
-    out = np.zeros_like(data) * np.nan
     num_discard = kwargs.pop("num_discard")
 
-    assert "axis" not in kwargs
-    kwargs["axis"] = -1
-
     if gappy:
-        raise ValueError("find_segments not fixed for apply_ufunc yet!")
-        segstart, segend = find_segments(data)
-        for index, start in np.ndenumerate(segstart):
-            stop = segend[index]
-            try:
-                out[..., start:stop] = signal.filtfilt(
-                    b, a, data[..., start:stop], **kwargs
-                )
-                if num_discard is not None and num_discard > 0:
-                    out[..., start : start + num_discard] = np.nan
-                    out[..., stop - num_discard : stop] = np.nan
-            except ValueError:
-                # segment is not long enough for filtfilt
-                pass
+        if isinstance(data, dask.array.Array):
+            apply_func = dask.array.apply_along_axis
+        else:
+            apply_func = np.apply_along_axis
+
+        out = apply_func(gappy_1d_filter, -1, data, b, a, num_discard, **kwargs)
+
     else:
+        assert "axis" not in kwargs
+        kwargs["axis"] = -1
+
         out = signal.filtfilt(b, a, data, **kwargs)
         if num_discard is not None and num_discard > 0:
             out[..., :num_discard] = np.nan
@@ -187,8 +198,8 @@ def _wrap_butterworth(
                 f"Chunksize along {coord} = {actual_chunksize} < {min_chunksize}. Please rechunk"
             )
 
-        depth = dict(zip(range(data.ndim), [0]*data.ndim))
-        depth[data.ndim-1] = overlap
+        depth = dict(zip(range(data.ndim), [0] * data.ndim))
+        depth[data.ndim - 1] = overlap
         filtered = data.copy(
             data=dask.array.map_overlap(
                 data.data,

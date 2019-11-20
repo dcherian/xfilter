@@ -1,6 +1,7 @@
 import dask
 import dcpy.ts
 import numpy as np
+import warnings
 import xarray as xr
 
 from scipy import signal
@@ -70,7 +71,6 @@ def gappy_filter(data, b, a, gappy=True, **kwargs):
             apply_func = dask.array.apply_along_axis
         else:
             apply_func = np.apply_along_axis
-
         out = apply_func(gappy_1d_filter, -1, data, b, a, num_discard, **kwargs)
 
     else:
@@ -116,7 +116,7 @@ def find_segments(var):
 
 
 def _wrap_butterworth(
-    data, coord, freq, kind, cycles_per="s", order=2, debug=False, gappy=True, **kwargs
+    data, coord, freq, kind, cycles_per="s", order=2, debug=False, gappy=None, **kwargs
 ):
     """
     Inputs
@@ -167,22 +167,39 @@ def _wrap_butterworth(
     kwargs.setdefault("num_discard", "auto")
     kwargs.setdefault("method", "gust")
 
+    if gappy is not None:
+        warnings.warn("The 'gappy' kwarg is now deprecated.")
+    else:
+        gappy = True
+
     if kwargs["method"] == "gust" and "irlen" not in kwargs:
         kwargs["irlen"] = estimate_impulse_response_len(b, a)
-    kwargs["num_discard"] = _get_num_discard(kwargs)
+    num_discard = _get_num_discard(kwargs)
+    kwargs["num_discard"] = num_discard
 
     kwargs.update(b=b, a=a, gappy=gappy)
+
+    valid = data.notnull()
+    filled = data.ffill(coord).bfill(coord)
+    # I need distance from nearest NaN
+    index = np.arange(data.sizes[coord])
+    arange = xr.ones_like(data) * index
+    invalid_arange = arange.where(~valid).interpolate_na(
+        coord, "nearest", fill_value="extrapolate"
+    )
+    distance = np.abs(arange - invalid_arange).where(data.notnull())
 
     if not use_overlap:
         filtered = xr.apply_ufunc(
             gappy_filter,
-            data,
+            filled,
             input_core_dims=[[coord]],
             output_core_dims=[[coord]],
             dask="parallelized",
             output_dtypes=[data.dtype],
             kwargs=kwargs,
         )
+
     else:
         num_discard = kwargs.pop("num_discard")
         if not isinstance(data, xr.DataArray):
@@ -202,7 +219,7 @@ def _wrap_butterworth(
         depth[data.ndim - 1] = overlap
         filtered = data.copy(
             data=dask.array.map_overlap(
-                data.data,
+                filled.data,
                 gappy_filter,
                 depth=depth,
                 boundary="none",
@@ -212,11 +229,16 @@ def _wrap_butterworth(
             )
         )
 
-        # manually nan-out num_discard at the front and back
-        mask = xr.DataArray(np.ones((filtered.sizes[coord],)), dims=[coord], name=coord)
+    # take out the beginning and end if necessary
+    mask = xr.DataArray(
+        np.ones((filtered.sizes[coord],), dtype=bool), dims=[coord], name=coord
+    )
+    if num_discard > 0:
         mask[:num_discard] = False
         mask[-num_discard:] = False
         filtered = filtered.where(mask)
+
+    filtered = filtered.where((distance <= kwargs["num_discard"]) & mask)
 
     if debug:
         import matplotlib.pyplot as plt

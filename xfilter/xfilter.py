@@ -184,8 +184,10 @@ def _wrap_butterworth(
     # I need distance from nearest NaN
     index = np.arange(data.sizes[coord])
     arange = xr.ones_like(data) * index
-    invalid_arange = arange.where(~valid).interpolate_na(
-        coord, "nearest", fill_value="extrapolate"
+    invalid_arange = (
+        arange.where(~valid)
+        .interpolate_na(coord, "nearest", fill_value="extrapolate")
+        .fillna(np.inf)  # this is only when there are no NaNs in the data.
     )
     distance = np.abs(arange - invalid_arange).where(data.notnull())
 
@@ -238,7 +240,7 @@ def _wrap_butterworth(
         mask[-num_discard:] = False
         filtered = filtered.where(mask)
 
-    filtered = filtered.where((distance <= kwargs["num_discard"]) & mask)
+    filtered = filtered.where((distance >= kwargs["num_discard"]) & mask)
 
     if debug:
         import matplotlib.pyplot as plt

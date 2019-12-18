@@ -153,7 +153,11 @@ def _wrap_butterworth(
     data = data.copy().transpose(..., coord)
 
     if debug:
-        dcpy.ts.PlotSpectrum(data, cycles_per=cycles_per)
+        import matplotlib.pyplot as plt
+
+        f, ax = plt.subplots(2, 1, constrained_layout=True)
+        data.plot(x=coord, ax=ax[0])
+        dcpy.ts.PlotSpectrum(data, cycles_per=cycles_per, ax=ax[1])
 
     if data.chunks:
         chunks = dict(zip(data.dims, data.chunks))
@@ -243,11 +247,10 @@ def _wrap_butterworth(
     filtered = filtered.where((distance >= kwargs["num_discard"]) & mask)
 
     if debug:
-        import matplotlib.pyplot as plt
-
-        ylim = plt.gca().get_ylim()
-        dcpy.ts.PlotSpectrum(filtered, cycles_per=cycles_per, ax=plt.gca())
-        plt.gca().set_ylim(ylim)
+        filtered.plot(x=coord, ax=ax[0])
+        ylim = ax[1].get_ylim()
+        dcpy.ts.PlotSpectrum(filtered, cycles_per=cycles_per, ax=ax[1])
+        ax[1].set_ylim(ylim)
         for ff in np.array(freq, ndmin=1):
             plt.axvline(ff)
 

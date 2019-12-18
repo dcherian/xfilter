@@ -258,6 +258,10 @@ def _wrap_butterworth(
 
 
 def bandpass(data, coord, freq, **kwargs):
+    if len(np.atleast_1d(freq)) != 2:
+        raise ValueError(
+            f"Expected freq to be a 2 element vector. Received ({freq}) instead."
+        )
     return _wrap_butterworth(data, coord, np.sort(freq), kind="bandpass", **kwargs)
 
 

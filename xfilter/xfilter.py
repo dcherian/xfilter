@@ -78,9 +78,6 @@ def gappy_filter(data, b, a, gappy=True, **kwargs):
         kwargs["axis"] = -1
 
         out = signal.filtfilt(b, a, data, **kwargs)
-        if num_discard is not None and num_discard > 0:
-            out[..., :num_discard] = np.nan
-            out[..., -num_discard:] = np.nan
 
     return out
 
@@ -239,10 +236,9 @@ def _wrap_butterworth(
     mask = xr.DataArray(
         np.ones((filtered.sizes[coord],), dtype=bool), dims=[coord], name=coord
     )
-    if num_discard > 0:
+    if kwargs["num_discard"] > 0:
         mask[:num_discard] = False
         mask[-num_discard:] = False
-        filtered = filtered.where(mask)
 
     filtered = filtered.where((distance <= kwargs["num_discard"]) & mask)
 

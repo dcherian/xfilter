@@ -167,7 +167,7 @@ def _wrap_butterworth(
     if gappy is not None:
         warnings.warn("The 'gappy' kwarg is now deprecated.")
     else:
-        gappy = True
+        gappy = False
 
     if kwargs["method"] == "gust" and "irlen" not in kwargs:
         kwargs["irlen"] = estimate_impulse_response_len(b, a)

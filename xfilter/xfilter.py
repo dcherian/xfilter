@@ -242,7 +242,7 @@ def _wrap_butterworth(
         mask[:num_discard] = False
         mask[-num_discard:] = False
 
-    filtered = filtered.where((distance <= kwargs["num_discard"]) & mask)
+    filtered = filtered.where((distance >= kwargs["num_discard"]) & mask)
 
     if debug:
         import matplotlib.pyplot as plt

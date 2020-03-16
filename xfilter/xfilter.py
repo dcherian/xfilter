@@ -180,7 +180,13 @@ def _wrap_butterworth(
     kwargs.update(b=b, a=a, gappy=gappy)
 
     valid = data.notnull()
-    filled = data.ffill(coord).bfill(coord)
+    if np.issubdtype(data.dtype, np.dtype(complex)):
+        filled = data.real.ffill(coord).bfill(coord) + 1j * data.imag.ffill(
+            coord
+        ).bfill(coord)
+    else:
+        filled = data.ffill(coord).bfill(coord)
+
     # I need distance from nearest NaN
     index = np.arange(data.sizes[coord])
     arange = xr.ones_like(data) * index

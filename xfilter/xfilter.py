@@ -77,9 +77,6 @@ def gappy_filter(data, b, a, gappy=True, **kwargs):
         kwargs["axis"] = -1
 
         out = signal.filtfilt(b, a, data, **kwargs)
-        if num_discard is not None and num_discard > 0:
-            out[..., :num_discard] = np.nan
-            out[..., -num_discard:] = np.nan
 
     return out
 
@@ -174,7 +171,7 @@ def _wrap_butterworth(
     if gappy is not None:
         warnings.warn("The 'gappy' kwarg is now deprecated.")
     else:
-        gappy = True
+        gappy = False
 
     if kwargs["method"] == "gust" and "irlen" not in kwargs:
         kwargs["irlen"] = estimate_impulse_response_len(b, a)
@@ -184,16 +181,22 @@ def _wrap_butterworth(
     kwargs.update(b=b, a=a, gappy=gappy)
 
     valid = data.notnull()
-    filled = data.ffill(coord).bfill(coord)
+    if np.issubdtype(data.dtype, np.dtype(complex)):
+        filled = data.real.ffill(coord).bfill(coord) + 1j * data.imag.ffill(
+            coord
+        ).bfill(coord)
+    else:
+        filled = data.ffill(coord).bfill(coord)
+
     # I need distance from nearest NaN
     index = np.arange(data.sizes[coord])
-    arange = xr.ones_like(data) * index
+    arange = xr.ones_like(data.reset_coords(drop=True), dtype=int) * index
     invalid_arange = (
         arange.where(~valid)
         .interpolate_na(coord, "nearest", fill_value="extrapolate")
-        .fillna(np.inf)  # this is only when there are no NaNs in the data.
+        .fillna(-1)  # when all points are valid
     )
-    distance = np.abs(arange - invalid_arange).where(data.notnull())
+    distance = np.abs(arange - invalid_arange).where(valid)
 
     if not use_overlap:
         filtered = xr.apply_ufunc(
@@ -239,10 +242,9 @@ def _wrap_butterworth(
     mask = xr.DataArray(
         np.ones((filtered.sizes[coord],), dtype=bool), dims=[coord], name=coord
     )
-    if num_discard > 0:
+    if kwargs["num_discard"] > 0:
         mask[:num_discard] = False
         mask[-num_discard:] = False
-        filtered = filtered.where(mask)
 
     filtered = filtered.where((distance >= kwargs["num_discard"]) & mask)
 

@@ -22,10 +22,10 @@ def _get_num_discard(kwargs):
 def _process_time(time, cycles_per="s"):
 
     time = time.copy()
-    dt = np.nanmedian(np.diff(time.values) / np.timedelta64(1, cycles_per))
+    dt = np.nanmedian(np.diff(time.values).astype(np.timedelta64) / np.timedelta64(1, cycles_per))
 
     time = np.cumsum(time.copy().diff(dim=time.dims[0]) / np.timedelta64(1, cycles_per))
-
+    print(dt)
     return dt, time
 
 
@@ -78,6 +78,9 @@ def gappy_filter(data, b, a, gappy=True, **kwargs):
         kwargs["axis"] = -1
 
         out = signal.filtfilt(b, a, data, **kwargs)
+        if num_discard is not None and num_discard > 0:
+            out[..., :num_discard] = np.nan
+            out[..., -num_discard:] = np.nan
 
     return out
 
@@ -111,6 +114,23 @@ def find_segments(var):
 
     return start, stop
 
+def _is_datetime_like(da) -> bool:
+    import numpy as np
+
+    if np.issubdtype(da.dtype, np.datetime64) or np.issubdtype(
+        da.dtype, np.timedelta64
+    ):
+        return True
+
+    try:
+        import cftime
+
+        if isinstance(da.data[0], cftime.datetime):
+            return True
+    except ImportError:
+        pass
+
+    return False
 
 def _wrap_butterworth(
     data, coord, freq, kind, cycles_per="s", order=2, debug=False, gappy=None, **kwargs
@@ -140,7 +160,8 @@ def _wrap_butterworth(
     # else:
     #     coord = data.coords[0]
 
-    if data[coord].dtype.kind == "M":
+    if _is_datetime_like(data[coord]):
+        print('processed time')
         dx, x = _process_time(data[coord], cycles_per)
     else:
         dx = np.diff(data[coord][0:2].values)
@@ -171,7 +192,7 @@ def _wrap_butterworth(
     if gappy is not None:
         warnings.warn("The 'gappy' kwarg is now deprecated.")
     else:
-        gappy = False
+        gappy = True
 
     if kwargs["method"] == "gust" and "irlen" not in kwargs:
         kwargs["irlen"] = estimate_impulse_response_len(b, a)
@@ -181,22 +202,16 @@ def _wrap_butterworth(
     kwargs.update(b=b, a=a, gappy=gappy)
 
     valid = data.notnull()
-    if np.issubdtype(data.dtype, np.dtype(complex)):
-        filled = data.real.ffill(coord).bfill(coord) + 1j * data.imag.ffill(
-            coord
-        ).bfill(coord)
-    else:
-        filled = data.ffill(coord).bfill(coord)
-
+    filled = data.ffill(coord).bfill(coord)
     # I need distance from nearest NaN
     index = np.arange(data.sizes[coord])
-    arange = xr.ones_like(data.reset_coords(drop=True), dtype=int) * index
+    arange = xr.ones_like(data) * index
     invalid_arange = (
         arange.where(~valid)
         .interpolate_na(coord, "nearest", fill_value="extrapolate")
-        .fillna(-1)  # when all points are valid
+        .fillna(np.inf)  # this is only when there are no NaNs in the data.
     )
-    distance = np.abs(arange - invalid_arange).where(valid)
+    distance = np.abs(arange - invalid_arange).where(data.notnull())
 
     if not use_overlap:
         filtered = xr.apply_ufunc(
@@ -242,9 +257,10 @@ def _wrap_butterworth(
     mask = xr.DataArray(
         np.ones((filtered.sizes[coord],), dtype=bool), dims=[coord], name=coord
     )
-    if kwargs["num_discard"] > 0:
+    if num_discard > 0:
         mask[:num_discard] = False
         mask[-num_discard:] = False
+        filtered = filtered.where(mask)
 
     filtered = filtered.where((distance >= kwargs["num_discard"]) & mask)
 

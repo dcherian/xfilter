@@ -21,7 +21,7 @@ def _get_num_discard(kwargs):
 def _process_time(time, cycles_per="s"):
 
     time = time.copy()
-    dt = np.nanmedian(np.diff(time.values) / np.timedelta64(1, cycles_per))
+    dt = np.nanmedian(np.diff(time.values).astype(np.timedelta64) / np.timedelta64(1, cycles_per))
 
     time = np.cumsum(time.copy().diff(dim=time.dims[0]) / np.timedelta64(1, cycles_per))
 
@@ -110,6 +110,23 @@ def find_segments(var):
 
     return start, stop
 
+def _is_datetime_like(da) -> bool:
+    import numpy as np
+
+    if np.issubdtype(da.dtype, np.datetime64) or np.issubdtype(
+        da.dtype, np.timedelta64
+    ):
+        return True
+
+    try:
+        import cftime
+
+        if isinstance(da.data[0], cftime.datetime):
+            return True
+    except ImportError:
+        pass
+
+    return False
 
 def _wrap_butterworth(
     data, coord, freq, kind, cycles_per="s", order=2, debug=False, gappy=None, **kwargs
@@ -139,7 +156,7 @@ def _wrap_butterworth(
     # else:
     #     coord = data.coords[0]
 
-    if data[coord].dtype.kind == "M":
+    if _is_datetime_like(data[coord]):
         dx, x = _process_time(data[coord], cycles_per)
     else:
         dx = np.diff(data[coord][0:2].values)

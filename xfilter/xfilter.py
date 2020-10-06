@@ -1,5 +1,4 @@
 import dask
-import dcpy.ts
 import numpy as np
 import warnings
 import xarray as xr
@@ -153,6 +152,7 @@ def _wrap_butterworth(
     data = data.copy().transpose(..., coord)
 
     if debug:
+        import dcpy.ts
         import matplotlib.pyplot as plt
 
         f, ax = plt.subplots(2, 1, constrained_layout=True)

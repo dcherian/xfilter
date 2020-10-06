@@ -20,19 +20,17 @@ def _get_num_discard(kwargs):
 
 def _process_time(time, cycles_per="s"):
 
-    time = time.copy()
-    dt = np.nanmedian(np.diff(time.values).astype(np.timedelta64) / np.timedelta64(1, cycles_per))
-
-    time = np.cumsum(time.copy().diff(dim=time.dims[0]) / np.timedelta64(1, cycles_per))
-
-    return dt, time
+    dt = np.nanmedian(
+        np.diff(time.values).astype(np.timedelta64) / np.timedelta64(1, cycles_per)
+    )
+    return dt
 
 
 def estimate_impulse_response_len(b, a, eps=1e-3):
-    """ From scipy filtfilt docs.
-        Input:
-             b, a : filter params
-             eps  : How low must the signal drop to? (default 1e-2)
+    """From scipy filtfilt docs.
+    Input:
+         b, a : filter params
+         eps  : How low must the signal drop to? (default 1e-2)
     """
 
     _, p, _ = signal.tf2zpk(b, a)
@@ -83,12 +81,12 @@ def gappy_filter(data, b, a, gappy=True, **kwargs):
 
 def find_segments(var):
     """
-      Finds and return valid index ranges for the input time series.
-      Input:
-            var - input time series
-      Output:
-            start - starting indices of valid ranges
-            stop  - ending indices of valid ranges
+    Finds and return valid index ranges for the input time series.
+    Input:
+          var - input time series
+    Output:
+          start - starting indices of valid ranges
+          stop  - ending indices of valid ranges
     """
 
     NotNans = np.double(~np.isnan(var))
@@ -110,6 +108,7 @@ def find_segments(var):
 
     return start, stop
 
+
 def _is_datetime_like(da) -> bool:
     import numpy as np
 
@@ -127,6 +126,7 @@ def _is_datetime_like(da) -> bool:
         pass
 
     return False
+
 
 def _wrap_butterworth(
     data, coord, freq, kind, cycles_per="s", order=2, debug=False, gappy=None, **kwargs
@@ -157,7 +157,7 @@ def _wrap_butterworth(
     #     coord = data.coords[0]
 
     if _is_datetime_like(data[coord]):
-        dx, x = _process_time(data[coord], cycles_per)
+        dx = _process_time(data[coord], cycles_per)
     else:
         dx = np.diff(data[coord][0:2].values)
 

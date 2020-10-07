@@ -1,0 +1,9 @@
+name: xfilter_test
+channels:
+  - conda-forge
+dependencies:
+  - pytest-cov
+  - pytest
+  - dask
+  - pandas
+  - xarray

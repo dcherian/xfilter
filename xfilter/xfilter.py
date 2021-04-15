@@ -44,7 +44,6 @@ def filter_(data, b, a, **kwargs):
     return out
 
 
-
 def _is_datetime_like(da) -> bool:
     import numpy as np
 
@@ -119,7 +118,9 @@ def _wrap_butterworth(
         use_overlap = False
 
     if gappy is not None:
-        warnings.warn(UserWarning, "'gappy' kwarg is now deprecated and completely ignored.")
+        warnings.warn(
+            UserWarning, "'gappy' kwarg is now deprecated and completely ignored."
+        )
 
     num_discard = kwargs.pop("num_discard", "auto")
     kwargs.setdefault("method", "gust")
@@ -185,7 +186,10 @@ def _wrap_butterworth(
 
     # take out the beginning and end if necessary
     mask = xr.DataArray(
-        np.ones((filtered.sizes[coord],), dtype=bool), dims=[coord], name=coord, coords={coord: filtered[coord]}
+        np.ones((filtered.sizes[coord],), dtype=bool),
+        dims=[coord],
+        name=coord,
+        coords={coord: filtered[coord]},
     )
     num_discard = _get_num_discard(kwargs, num_discard)
     if num_discard > 0:

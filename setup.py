@@ -1,13 +1,13 @@
+#!/usr/bin/env python
 from setuptools import setup
 
 setup(
+    # The package metadata is specified in setup.cfg but GitHub's downstream dependency graph
+    # does not work unless we put the name this here too.
     name="xfilter",
-    version="0.1",
-    description="xarray-aware filtering",
-    url="http://github.com/dcherian/xfilter",
-    author="Deepak Cherian",
-    author_email="deepak@cherian.net",
-    license="GPL3",
-    packages=["xfilter"],
-    zip_safe=False,
+    use_scm_version={
+        "write_to": "xfilter/_version.py",
+        "write_to_template": '__version__ = "{version}"',
+        "tag_regex": r"^(?P<prefix>v)?(?P<version>[^\+]+)(?P<suffix>.*)?$",
+    },
 )

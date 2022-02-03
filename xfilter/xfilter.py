@@ -1,6 +1,5 @@
 import warnings
 
-import dask
 import numpy as np
 import xarray as xr
 from scipy import signal
@@ -158,6 +157,8 @@ def _wrap_butterworth(
         )
 
     else:
+        import dask
+
         if not isinstance(data, xr.DataArray):
             raise ValueError("map_overlap implemented only for DataArrays.")
         irlen = estimate_impulse_response_len(b, a)

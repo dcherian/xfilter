@@ -1,15 +1,12 @@
 import warnings
 
-import dask
 import numpy as np
+import xarray as xr
 from scipy import signal
 
-import xarray as xr
 
+def _get_num_discard(kwargs, num_discard):
 
-def _get_num_discard(kwargs):
-
-    num_discard = kwargs.get("num_discard")
     if num_discard == "auto":
         if "irlen" in kwargs:
             num_discard = kwargs["irlen"]
@@ -43,73 +40,9 @@ def estimate_impulse_response_len(b, a, eps=1e-3):
     return approx_impulse_len
 
 
-def gappy_1d_filter(data, b, a, num_discard, **kwargs):
-    out = np.zeros_like(data) * np.nan
-    assert data.ndim == 1
-    segstart, segend = find_segments(data)
-    for index, start in np.ndenumerate(segstart):
-        stop = segend[index]
-        try:
-            out[..., start:stop] = signal.filtfilt(
-                b, a, data[..., start:stop], **kwargs
-            )
-            if num_discard is not None and num_discard > 0:
-                out[..., start : start + num_discard] = np.nan
-                out[..., stop - num_discard : stop] = np.nan
-        except ValueError:
-            # segment is not long enough for filtfilt
-            pass
+def filter_(data, b, a, **kwargs):
+    out = signal.filtfilt(b, a, data, **kwargs)
     return out
-
-
-def gappy_filter(data, b, a, gappy=True, **kwargs):
-
-    num_discard = kwargs.pop("num_discard")
-
-    if gappy:
-        if isinstance(data, dask.array.Array):
-            apply_func = dask.array.apply_along_axis
-        else:
-            apply_func = np.apply_along_axis
-        out = apply_func(gappy_1d_filter, -1, data, b, a, num_discard, **kwargs)
-
-    else:
-        assert "axis" not in kwargs
-        kwargs["axis"] = -1
-
-        out = signal.filtfilt(b, a, data, **kwargs)
-
-    return out
-
-
-def find_segments(var):
-    """
-    Finds and return valid index ranges for the input time series.
-    Input:
-          var - input time series
-    Output:
-          start - starting indices of valid ranges
-          stop  - ending indices of valid ranges
-    """
-
-    NotNans = np.double(~np.isnan(var))
-    edges = np.diff(NotNans)
-    start = np.where(edges == 1)[0]
-    stop = np.where(edges == -1)[0]
-
-    if start.size == 0 and stop.size == 0:
-        start = np.array([0])
-        stop = np.array([len(var) - 1])
-
-    else:
-        start = start + 1
-        if ~np.isnan(var[0]):
-            start = np.insert(start, 0, 0)
-
-        if ~np.isnan(var[-1]):
-            stop = np.append(stop, len(var) - 1)
-
-    return start, stop
 
 
 def _is_datetime_like(da) -> bool:
@@ -185,20 +118,16 @@ def _wrap_butterworth(
     else:
         use_overlap = False
 
-    kwargs.setdefault("num_discard", "auto")
-    kwargs.setdefault("method", "gust")
-
     if gappy is not None:
-        warnings.warn("The 'gappy' kwarg is now deprecated.")
-    else:
-        gappy = False
+        warnings.warn(
+            UserWarning, "'gappy' kwarg is now deprecated and completely ignored."
+        )
 
+    num_discard = kwargs.pop("num_discard", "auto")
+    kwargs.setdefault("method", "gust")
     if kwargs["method"] == "gust" and "irlen" not in kwargs:
         kwargs["irlen"] = estimate_impulse_response_len(b, a)
-    num_discard = _get_num_discard(kwargs)
-    kwargs["num_discard"] = num_discard
-
-    kwargs.update(b=b, a=a, gappy=gappy)
+    kwargs.update(b=b, a=a, axis=-1)
 
     valid = data.notnull()
     if np.issubdtype(data.dtype, np.dtype(complex)):
@@ -220,7 +149,7 @@ def _wrap_butterworth(
 
     if not use_overlap:
         filtered = xr.apply_ufunc(
-            gappy_filter,
+            filter_,
             filled,
             input_core_dims=[[coord]],
             output_core_dims=[[coord]],
@@ -230,7 +159,8 @@ def _wrap_butterworth(
         )
 
     else:
-        num_discard = kwargs.pop("num_discard")
+        import dask
+
         if not isinstance(data, xr.DataArray):
             raise ValueError("map_overlap implemented only for DataArrays.")
         irlen = estimate_impulse_response_len(b, a)
@@ -249,24 +179,27 @@ def _wrap_butterworth(
         filtered = data.copy(
             data=dask.array.map_overlap(
                 filled.data,
-                gappy_filter,
+                filter_,
                 depth=depth,
                 boundary="none",
-                num_discard=None,  # don't discard since map_overlap's trimming will do this.
-                meta=data.data._meta,
+                meta=filled.data._meta,
                 **kwargs,
             )
         )
 
     # take out the beginning and end if necessary
     mask = xr.DataArray(
-        np.ones((filtered.sizes[coord],), dtype=bool), dims=[coord], name=coord
+        np.ones((filtered.sizes[coord],), dtype=bool),
+        dims=[coord],
+        name=coord,
+        coords={coord: filtered[coord]},
     )
-    if kwargs["num_discard"] > 0:
+    num_discard = _get_num_discard(kwargs, num_discard)
+    if num_discard > 0:
         mask[:num_discard] = False
         mask[-num_discard:] = False
 
-    filtered = filtered.where((distance >= kwargs["num_discard"]) & mask)
+    filtered = filtered.where((distance >= num_discard) & mask)
 
     if debug:
         filtered.plot(x=coord, ax=ax[0])

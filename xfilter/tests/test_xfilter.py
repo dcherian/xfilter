@@ -1,7 +1,6 @@
 import dask
 import numpy as np
 import pytest
-
 import xarray as xr
 
 from ..xfilter import bandpass, highpass, lowpass

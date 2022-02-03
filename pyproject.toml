@@ -1,0 +1,32 @@
+[build-system]
+requires = [
+    "setuptools>=42",
+    "wheel",
+    "setuptools_scm[toml]>=3.4",
+    "setuptools_scm_git_archive",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+fallback_version = "999"
+
+[tool.black]
+line-length = 100
+target-version = ["py38"]
+
+[tool.isort]
+profile = "black"
+skip_gitignore = true
+float_to_top = true
+combine_as_imports = true
+known_first_party = "xfilter"
+known_third_party = [
+    "dask",
+    "numpy",
+    "pytest",
+    "setuptools",
+    "xarray"
+]
+
+[tool.pytest.ini_options]
+addopts = "--tb=short"

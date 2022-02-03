@@ -11,7 +11,9 @@ def _get_num_discard(kwargs, num_discard):
         if "irlen" in kwargs:
             num_discard = kwargs["irlen"]
         else:
-            num_discard = estimate_impulse_response_len(b, a)
+            num_discard = estimate_impulse_response_len(
+                kwargs.get("b"), kwargs.get("a")
+            )
 
     return num_discard
 
@@ -101,7 +103,7 @@ def _wrap_butterworth(
 
     if debug:
         import dcpy.ts
-        import matplotlib.pyplot as plt
+        from matplotlib import pyplot as plt
 
         f, ax = plt.subplots(2, 1, constrained_layout=True)
         data.plot(x=coord, ax=ax[0])

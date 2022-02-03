@@ -1,0 +1,10 @@
+name: xfilter_test
+channels:
+  - conda-forge
+dependencies:
+  - pytest-cov
+  - pytest
+  - dask
+  - pandas
+  - pip:
+    - git+https://github.com/pydata/xarray
